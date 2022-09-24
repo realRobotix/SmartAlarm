@@ -7,9 +7,9 @@ class Timetable:
         client: Client,
         startDate: str,
         endDate: str,
-        classes: list = ["EFB"],
-        teachers: list = ["%"],
-        rooms: list = ["%"],
+        classes: str = '["EFB"]',
+        teachers: str = '["%"]',
+        rooms: str = '["%"]',
     ) -> None:
         with client.session as s:
             params = {
@@ -23,7 +23,7 @@ class Timetable:
                 }
             }
             r = s.get(
-                url=f'https://stein-gy.de/iserv/timetable/data?filter={{"startDate":"{startDate}","endDate":"{endDate}","classes":["EFB"],"teachers":["%"],"rooms":["%"]}}',
+                url=f'https://stein-gy.de/iserv/timetable/data?filter={{"startDate":"{startDate}","endDate":"{endDate}","classes":{classes},"teachers":["%"],"rooms":["%"]}}',
             )
             print(r.json())
             response = {

@@ -17,48 +17,37 @@ client = Client()
 
 
 def main():
-    client.mqtt.enable_logger()
-    client.mqtt.connect("smartalarm.local")
-    client.mqtt.loop_start()
+    global leadtime
+    leadtime = 7200
+    global regular_school_start
     regular_school_start = 28200
-    new_school_start = int(datetime.today().strftime("%s"))
-    while True:
-        if time.time() > new_school_start:
-            client.iserv.login(
-                username=client.env.ISERV_USERNAME, password=client.env.ISERV_PASSWORD
-            )
-            # get the timestamp from the start of tomorrow
-            date = datetime.today() + timedelta(days=3)
-            date = date.replace(hour=0, minute=0, second=0, microsecond=0)
 
-            tt = IServUserAPI.modules.Timetable(
-                client=client.iserv,
-                startDate=date.strftime("%d.%m.%Y"),
-                endDate=date.strftime("%d.%m.%Y"),
-            )
+    # new_school_start = int(datetime.today().strftime("%s"))
+    def on_leadtime(client, userdata, message):
+        global leadtime
+        leadtime = int(message.payload) * 60
 
-            canceled = []
-            for change in tt.changes:
-                if change["chgdow"] == "0":
-                    canceled += change
-            print(date.timestamp())
-            new_school_start = (
-                sort_canceled(canceled) * 2700 + regular_school_start + date.timestamp()
-            )
-            print(new_school_start)
-            client.mqtt.publish(
-                topic="timetable/posix", payload=int(new_school_start), retain=True
-            )
-            client.mqtt.publish(
-                topic="timetable/datetime",
-                payload=datetime.fromtimestamp(new_school_start).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-                retain=True,
-            )
-            client.iserv.logout()
-        else:
-            time.sleep(10)
+    def on_active(client, userdata, message: mqtt.MQTTMessage):
+        if message.payload.decode("UTF_8") == "True":
+            update_time()
+
+    def on_school_start(client, userdata, message: mqtt.MQTTMessage):
+        m = str(message.payload.decode("UTF_8")).split(":")
+        global regular_school_start
+        regular_school_start = int(m[0]) * 3600 + int(m[1].replace(":", "")) * 60
+
+    def on_connect(client: mqtt.Client, userdata, flags, rc):
+        client.message_callback_add("web/leadtime", on_leadtime)
+        client.message_callback_add("alarm/active", on_active)
+        client.message_callback_add("web/school_start", on_school_start)
+        client.subscribe("web/leadtime")
+        client.subscribe("alarm/active")
+        client.subscribe("web/school_start")
+        update_time()
+
+    client.mqtt.on_connect = on_connect
+    client.mqtt.connect("smartalarm.local")
+    client.mqtt.loop_forever()
 
 
 def sort_canceled(c: dict):
@@ -67,6 +56,40 @@ def sort_canceled(c: dict):
         if c[i]["period"] != i + 1:
             return i
     return 0
+
+
+def update_time():
+    client.iserv.login(
+        username=client.env.ISERV_USERNAME, password=client.env.ISERV_PASSWORD
+    )
+    # get the timestamp from the start of tomorrow
+    date = datetime.today() + timedelta(days=3)
+    date = date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    tt = IServUserAPI.modules.Timetable(
+        client=client.iserv,
+        startDate=date.strftime("%d.%m.%Y"),
+        endDate=date.strftime("%d.%m.%Y"),
+    )
+
+    canceled = []
+    for change in tt.changes:
+        if change["chgdow"] == "0":
+            canceled += change
+    print(date.timestamp())
+    new_school_start = (
+        sort_canceled(canceled) * 2700
+        + regular_school_start
+        + date.timestamp()
+        + leadtime
+    )
+    print(new_school_start)
+    client.mqtt.publish(topic="timetable/posix", payload=int(new_school_start))
+    client.mqtt.publish(
+        topic="timetable/datetime",
+        payload=datetime.fromtimestamp(new_school_start).strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    client.iserv.logout()
 
 
 if __name__ == "__main__":
