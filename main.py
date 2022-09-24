@@ -25,14 +25,14 @@ def main():
     # new_school_start = int(datetime.today().strftime("%s"))
     def on_leadtime(client, userdata, message):
         global leadtime
-        leadtime = int(message.payload) * 60
+        leadtime = int(message.payload.decode("utf8")) * 60
 
     def on_active(client, userdata, message: mqtt.MQTTMessage):
-        if message.payload.decode("UTF_8") == "True":
+        if message.payload.decode("utf8") == "True":
             update_time()
 
     def on_school_start(client, userdata, message: mqtt.MQTTMessage):
-        m = str(message.payload.decode("UTF_8")).split(":")
+        m = str(message.payload.decode("utf8")).split(":")
         global regular_school_start
         regular_school_start = int(m[0]) * 3600 + int(m[1].replace(":", "")) * 60
 
